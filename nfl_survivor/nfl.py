@@ -171,11 +171,11 @@ schedule = pd.read_csv(r'C:\Users\mpfle\Documents\opkut3\nfl_survivor\NFL\schedu
 
 winners = ['BUF','TB']
 
-#print(power_ranking.head())
+#updating the ratings according to the results of the first two weeks
 weekly_update(match_results["week 1 matching"], match_results["week 1 results"])
 weekly_update(match_results["week 2 matching"], match_results["week 2 results"])
-#print(power_ranking.head())
 
+#calculating the probabilities of each team winning in each round
 week_tables = []
 for week in range(3, 19):  # 19 is exclusive, so this will go from 3 to 18
     week_data = get_matches_with_probabilities(week)  # Get matches with probabilities for the week
@@ -184,19 +184,146 @@ for week in range(3, 19):  # 19 is exclusive, so this will go from 3 to 18
 
 #solution 1 (greedy algorithm)
 
+prob = 1
+probabilities = []
 for week_table in week_tables:
     for _, row in week_table.iterrows():
         team = row["Team"]
         if team not in winners:
             winners.append(team)
+            prob = prob*row["Probability"]
+            probabilities.append(row["Probability"])
             break
-print(winners)
 
-#Define the optimization problem using PULP
+winners_greedy = winners
+
+
+#Solution by ChatGPT (full lookahead)
+
+winners = ['BUF','TB']
 
 from pulp import *
+import numpy as np
 
+# Define the optimization problem
 survivor = LpProblem("survivor", LpMaximize)
 
-look_ahaed = 3
+# Define the binary decision variables
+x = LpVariable.dicts(
+    'x', 
+    [(week, team) for week, week_table in enumerate(week_tables) for team in week_table["Team"]],
+    cat="Binary"
+)
 
+# Objective function: maximize the sum of winning probabilities, filtering out inf or NaN
+survivor += lpSum(
+    x[(week, team)] * np.log(
+        week_table.loc[week_table["Team"] == team, "Probability"]
+        .replace([np.inf, -np.inf], np.nan)  # Handle any infinite probabilities
+        .fillna(0)  # Convert NaN probabilities to 0
+        .values[0]
+    )
+    for week, week_table in enumerate(week_tables)
+    for team in week_table["Team"]
+    if not pd.isnull(week_table.loc[week_table["Team"] == team, "Probability"]
+                     .replace([np.inf, -np.inf], np.nan)
+                     .values[0])  # Exclude teams with invalid probabilities
+), "Maximize_Product_of_Probabilities"
+
+# Add a constraint to ensure 'BUF' and 'TB' cannot be selected
+for team in winners:
+    for week, week_table in enumerate(week_tables):
+        if team in week_table["Team"]:
+            survivor += x[(week, team)] == 0, f"Exclude_{team}_from_week_{week}"
+
+# Constraint 1: Only one team per week
+for week, week_table in enumerate(week_tables):
+    survivor += lpSum(x[(week, team)] for team in week_table["Team"]) == 1, f"One_team_per_week_{week}"
+
+# Constraint 2: Each team can only be selected once
+all_teams = set(team for week_table in week_tables for team in week_table["Team"])
+for team in all_teams:
+    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables) if team in week_table["Team"]) <= 1, f"One_time_team_{team}"
+
+# Solve the problem
+survivor.solve()
+
+# Loop through each week and append the chosen team to the winners list
+for week, week_table in enumerate(week_tables):
+    for team in week_table["Team"]:
+        if x[(week, team)].varValue == 1:  # If the team is selected (binary decision variable is 1)
+            winners.append(team)  # Add to winners list
+            #print(f"Week {week + 1}: {team} is chosen")  # Print the team chosen for that week
+
+winners_full_lookahead = winners
+
+
+#Define problem with look_ahead = 4 (aim is to maximize the probability of surviving for 4 weeks, than a greedy algorthm)
+
+look_ahaed = 4
+winners = ['BUF','TB']
+
+# Define the optimization problem
+survivor = LpProblem("survivor", LpMaximize)
+
+# Define the binary decision variables
+x = LpVariable.dicts(
+    'x', 
+    [(week, team) for week, week_table in enumerate(week_tables[:look_ahaed]) for team in week_table["Team"]],
+    cat="Binary"
+)
+
+# Objective function: maximize the sum of winning probabilities, filtering out inf or NaN
+survivor += lpSum(
+    x[(week, team)] * np.log(
+        week_table.loc[week_table["Team"] == team, "Probability"]
+        .replace([np.inf, -np.inf], np.nan)  # Handle any infinite probabilities
+        .fillna(0)  # Convert NaN probabilities to 0
+        .values[0]
+    )
+    for week, week_table in enumerate(week_tables[:look_ahaed])
+    for team in week_table["Team"]
+    if not pd.isnull(week_table.loc[week_table["Team"] == team, "Probability"]
+                     .replace([np.inf, -np.inf], np.nan)
+                     .values[0])  # Exclude teams with invalid probabilities
+), "Maximize_Product_of_Probabilities"
+
+# Add a constraint to ensure 'BUF' and 'TB' cannot be selected
+for team in winners:
+    for week, week_table in enumerate(week_tables[:look_ahaed]):
+        if team in week_table["Team"]:
+            survivor += x[(week, team)] == 0, f"Exclude_{team}_from_week_{week}"
+
+# Constraint 1: Only one team per week
+for week, week_table in enumerate(week_tables[:look_ahaed]):
+    survivor += lpSum(x[(week, team)] for team in week_table["Team"]) == 1, f"One_team_per_week_{week}"
+
+# Constraint 2: Each team can only be selected once
+all_teams = set(team for week_table in week_tables for team in week_table["Team"])
+for team in all_teams:
+    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables[:look_ahaed]) if team in week_table["Team"]) <= 1, f"One_time_team_{team}"
+
+# Solve the problem
+survivor.solve()
+
+# Loop through each week and append the chosen team to the winners list
+for week, week_table in enumerate(week_tables[:look_ahaed]):
+    for team in week_table["Team"]:
+        if x[(week, team)].varValue == 1:  # If the team is selected (binary decision variable is 1)
+            winners.append(team)  # Add to winners list
+            #print(f"Week {week + 1}: {team} is chosen")  # Print the team chosen for that week
+
+for week_table in week_tables[look_ahaed:]:
+    for _, row in week_table.iterrows():
+        team = row["Team"]
+        if team not in winners:
+            winners.append(team)
+            break
+
+winners_with_lookahead = winners
+
+
+# Print the final list of winners
+print("Final choice with greedy algorithm: \n", winners_greedy)
+print("Final choice with full lookahead: \n", winners_full_lookahead)
+print("Final choice with lookahead: \n", winners_with_lookahead)
