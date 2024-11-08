@@ -145,24 +145,12 @@ def get_matches_with_probabilities(week):
             probability = win_probability(team1_elo, team2_elo, team1_home=True)
             probabilities.append(probability)
         else:
-            probabilities.append(None)  # Handle missing Elo data
+            probabilities.append(float('-inf'))  # Handle bye matches
 
     # Add the probabilities to the DataFrame
     matches_df['Probability'] = probabilities
 
     return matches_df
-
-
-"""#round 1
-for match, result in zip(match_results["week 1 matching"], match_results["week 1 results"]):
-    team1, team2 = match.split('-')
-    goals1, goals2 = result.split('-')
-    if goals1 > goals2:
-        elo_update(team1, team2, 1, power_ranking)
-    elif goals1 == goals2:
-        elo_update(team1, team2, 0, power_ranking)
-    elif goals1 < goals2:
-        elo_update(team1, team2, 1, power_ranking)"""
 
 #import files from computer
 import pandas as pd
@@ -181,21 +169,34 @@ power_ranking['ELO-score'] = power_ranking['ELO-score'].astype(float)
 #schedule = pd.read_csv(f'{folder_path}schedule.csv', delimiter=';')
 schedule = pd.read_csv(r'C:\Users\mpfle\Documents\opkut3\nfl_survivor\NFL\schedule.csv', delimiter=';')
 
-"""# Display the first few rows of each DataFrame to verify
-print("Match Results:")
-print(match_results.head(), "\n")
-
-print("Power Ranking:")
-print(power_ranking.head(), "\n")
-
-print("Schedule:")
-print(schedule.head())"""
+winners = ['BUF','TB']
 
 #print(power_ranking.head())
 weekly_update(match_results["week 1 matching"], match_results["week 1 results"])
 weekly_update(match_results["week 2 matching"], match_results["week 2 results"])
 #print(power_ranking.head())
 
-week = 3
-week_3 = get_matches_with_probabilities(week)
-print(week_3.head())
+week_tables = []
+for week in range(3, 19):  # 19 is exclusive, so this will go from 3 to 18
+    week_data = get_matches_with_probabilities(week)  # Get matches with probabilities for the week
+    globals()[f"week_{week}"] = week_data.sort_values(by="Probability", ascending=False)  # Dynamically create variables like week_3, week_4, ...
+    week_tables.append(globals()[f"week_{week}"])
+
+#solution 1 (greedy algorithm)
+
+for week_table in week_tables:
+    for _, row in week_table.iterrows():
+        team = row["Team"]
+        if team not in winners:
+            winners.append(team)
+            break
+print(winners)
+
+#Define the optimization problem using PULP
+
+from pulp import *
+
+survivor = LpProblem("survivor", LpMaximize)
+
+look_ahaed = 3
+
