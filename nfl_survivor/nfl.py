@@ -179,20 +179,20 @@ weekly_update(match_results["week 2 matching"], match_results["week 2 results"])
 week_tables = []
 for week in range(3, 19):  # 19 is exclusive, so this will go from 3 to 18
     week_data = get_matches_with_probabilities(week)  # Get matches with probabilities for the week
+    week_data = week_data[week_data["Probability"] != float('-inf')]
     globals()[f"week_{week}"] = week_data.sort_values(by="Probability", ascending=False)  # Dynamically create variables like week_3, week_4, ...
     week_tables.append(globals()[f"week_{week}"])
 
+
+
 #solution 1 (greedy algorithm)
 
-prob = 1
-probabilities = []
+
 for week_table in week_tables:
     for _, row in week_table.iterrows():
         team = row["Team"]
         if team not in winners:
             winners.append(team)
-            prob = prob*row["Probability"]
-            probabilities.append(row["Probability"])
             break
 
 winners_greedy = winners
@@ -260,7 +260,7 @@ winners_full_lookahead = winners
 
 #Define problem with look_ahead = 4 (aim is to maximize the probability of surviving for 4 weeks, than a greedy algorthm)
 
-look_ahaed = 4
+look_ahaed = 5
 winners = ['BUF','TB']
 
 # Define the optimization problem
@@ -327,3 +327,32 @@ winners_with_lookahead = winners
 print("Final choice with greedy algorithm: \n", winners_greedy)
 print("Final choice with full lookahead: \n", winners_full_lookahead)
 print("Final choice with lookahead: \n", winners_with_lookahead)
+
+
+
+
+#comparison of performance
+
+# Define a function to calculate the cumulative product of probabilities for a given winners vector
+def calculate_cumulative_probability(winners_vector, week_tables, n_weeks):
+    cumulative_prob = 1
+    winners_vector = winners_vector[2:n_weeks+2]
+    for week, week_table in enumerate(week_tables[:n_weeks]):  # Adjust to use only weeks up to n_weeks
+        team = winners_vector[week]  # Get the team chosen in this week
+        # Get the probability of the team for the current week
+        team_probability = week_table.loc[week_table["Team"] == team, "Probability"].replace([np.inf, -np.inf], np.nan).fillna(0).values[0]
+        cumulative_prob *= team_probability  # Multiply the probabilities
+    return cumulative_prob
+
+# Define the nth week you want to compare up to
+n_weeks = 10
+
+# Calculate cumulative probabilities for each winner vector (up to week n)
+prob_greedy = calculate_cumulative_probability(winners_greedy, week_tables, n_weeks)
+prob_full_lookahead = calculate_cumulative_probability(winners_full_lookahead, week_tables, n_weeks)
+prob_with_lookahead = calculate_cumulative_probability(winners_with_lookahead, week_tables, n_weeks)
+
+# Print or return the results for comparison
+print(f"Performance for Greedy (up to week {n_weeks}): {prob_greedy:.4f}")
+print(f"Performance for Full Lookahead (up to week {n_weeks}): {prob_full_lookahead:.4f}")
+print(f"Performance for Lookahead (up to week {n_weeks}): {prob_with_lookahead:.4f}")
