@@ -1,4 +1,4 @@
-def elo_update(team1, team2, result, power_ranking, k=20):
+def elo_update(team1, team2, result, k=20):
     """
     Updates the Elo ratings of two teams after a game.
 
@@ -6,11 +6,10 @@ def elo_update(team1, team2, result, power_ranking, k=20):
         team1 (str): Name of team 1.
         team2 (str): Name of team 2.
         result (int): Indicates the game outcome: 1 if team1 wins, 2 if team2 wins, 0 if it's a tie.
-        power_ranking (pd.DataFrame): DataFrame containing the teams and their Elo ratings.
         k (float): The K-factor determining the sensitivity of Elo adjustments. Default is 20.
 
     Returns:
-        tuple: Updated Elo ratings (new_team1_elo, new_team2_elo).
+        None.
     """
     # Get Elo ratings from the DataFrame for the teams
     team1_elo = power_ranking.loc[power_ranking['Team'] == team1, 'ELO-score'].values[0]
@@ -38,7 +37,7 @@ def elo_update(team1, team2, result, power_ranking, k=20):
     power_ranking.loc[power_ranking['Team'] == team1, 'ELO-score'] = new_team1_elo
     power_ranking.loc[power_ranking['Team'] == team2, 'ELO-score'] = new_team2_elo
 
-    return power_ranking
+    return None
 
 def win_probability(team1_elo, team2_elo, team1_home=True, home_field_advantage=0):
     """
@@ -48,7 +47,7 @@ def win_probability(team1_elo, team2_elo, team1_home=True, home_field_advantage=
         team1_elo (float): Elo rating of team 1.
         team2_elo (float): Elo rating of team 2.
         team1_home (bool): Whether team 1 is playing at home. Default is True.
-        home_field_advantage (float): Elo point adjustment for the home team. Default is 65.
+        home_field_advantage (float): Elo point adjustment for the home team.
 
     Returns:
         float: Probability of team 1 winning against team 2.
@@ -93,11 +92,11 @@ def weekly_update(matches, results):
         team1, team2 = match.split('-')
         goals1, goals2 = result.split('-')
         if goals1 > goals2:
-            elo_update(team1, team2, 1, power_ranking)
+            elo_update(team1, team2, 1)
         elif goals1 == goals2:
-            elo_update(team1, team2, 0, power_ranking)
+            elo_update(team1, team2, 0)
         elif goals1 < goals2:
-            elo_update(team1, team2, 1, power_ranking)
+            elo_update(team1, team2, 2)
     return None
 
 def get_matches_with_probabilities(week):
@@ -132,7 +131,7 @@ def get_matches_with_probabilities(week):
 
     # Calculate the probabilities for each match using the win_probability function
     probabilities = []
-    for index, row in matches_df.iterrows():
+    for _, row in matches_df.iterrows():
         team1 = row['Team']
         team2 = row['Opponent']
 
@@ -212,41 +211,39 @@ survivor = LpProblem("survivor", LpMaximize)
 x = LpVariable.dicts(
     'x', 
     [(week, team) for week, week_table in enumerate(week_tables) for team in week_table["Team"]],
-    cat="Binary"
+    cat='Binary'
 )
 
 # Objective function: maximize the sum of winning probabilities, filtering out inf or NaN
 survivor += lpSum(
     x[(week, team)] * np.log(
         week_table.loc[week_table["Team"] == team, "Probability"]
-        .replace([np.inf, -np.inf], np.nan)  # Handle any infinite probabilities
-        .fillna(0)  # Convert NaN probabilities to 0
         .values[0]
     )
     for week, week_table in enumerate(week_tables)
     for team in week_table["Team"]
-    if not pd.isnull(week_table.loc[week_table["Team"] == team, "Probability"]
-                     .replace([np.inf, -np.inf], np.nan)
-                     .values[0])  # Exclude teams with invalid probabilities
-), "Maximize_Product_of_Probabilities"
+)
 
 # Add a constraint to ensure 'BUF' and 'TB' cannot be selected
 for team in winners:
     for week, week_table in enumerate(week_tables):
-        if team in week_table["Team"]:
+        if team in week_table["Team"].values:
             survivor += x[(week, team)] == 0, f"Exclude_{team}_from_week_{week}"
 
-# Constraint 1: Only one team per week
+# Constraint 1: Exactly one team per week
 for week, week_table in enumerate(week_tables):
     survivor += lpSum(x[(week, team)] for team in week_table["Team"]) == 1, f"One_team_per_week_{week}"
 
 # Constraint 2: Each team can only be selected once
 all_teams = set(team for week_table in week_tables for team in week_table["Team"])
 for team in all_teams:
-    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables) if team in week_table["Team"]) <= 1, f"One_time_team_{team}"
+    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables) if team in week_table["Team"].values) <= 1, f"One_time_team_{team}"
 
 # Solve the problem
+pulp.LpSolverDefault.msg = False
 survivor.solve()
+
+print(f"Solver Status: {LpStatus[survivor.status]}")
 
 # Loop through each week and append the chosen team to the winners list
 for week, week_table in enumerate(week_tables):
@@ -277,21 +274,16 @@ x = LpVariable.dicts(
 survivor += lpSum(
     x[(week, team)] * np.log(
         week_table.loc[week_table["Team"] == team, "Probability"]
-        .replace([np.inf, -np.inf], np.nan)  # Handle any infinite probabilities
-        .fillna(0)  # Convert NaN probabilities to 0
         .values[0]
     )
     for week, week_table in enumerate(week_tables[:look_ahaed])
     for team in week_table["Team"]
-    if not pd.isnull(week_table.loc[week_table["Team"] == team, "Probability"]
-                     .replace([np.inf, -np.inf], np.nan)
-                     .values[0])  # Exclude teams with invalid probabilities
-), "Maximize_Product_of_Probabilities"
+)
 
 # Add a constraint to ensure 'BUF' and 'TB' cannot be selected
 for team in winners:
     for week, week_table in enumerate(week_tables[:look_ahaed]):
-        if team in week_table["Team"]:
+        if team in week_table["Team"].values:
             survivor += x[(week, team)] == 0, f"Exclude_{team}_from_week_{week}"
 
 # Constraint 1: Only one team per week
@@ -301,10 +293,13 @@ for week, week_table in enumerate(week_tables[:look_ahaed]):
 # Constraint 2: Each team can only be selected once
 all_teams = set(team for week_table in week_tables for team in week_table["Team"])
 for team in all_teams:
-    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables[:look_ahaed]) if team in week_table["Team"]) <= 1, f"One_time_team_{team}"
+    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables[:look_ahaed]) if team in week_table["Team"].values) <= 1, f"One_time_team_{team}"
 
 # Solve the problem
+pulp.LpSolverDefault.msg = False
 survivor.solve()
+
+print(f"Solver Status: {LpStatus[survivor.status]}")
 
 # Loop through each week and append the chosen team to the winners list
 for week, week_table in enumerate(week_tables[:look_ahaed]):
@@ -345,7 +340,7 @@ def calculate_cumulative_probability(winners_vector, week_tables, n_weeks):
     return cumulative_prob
 
 # Define the nth week you want to compare up to
-n_weeks = 10
+n_weeks = 6
 
 # Calculate cumulative probabilities for each winner vector (up to week n)
 prob_greedy = calculate_cumulative_probability(winners_greedy, week_tables, n_weeks)
