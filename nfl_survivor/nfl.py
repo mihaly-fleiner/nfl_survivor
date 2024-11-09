@@ -257,7 +257,7 @@ winners_full_lookahead = winners
 
 #Define problem with look_ahead = 4 (aim is to maximize the probability of surviving for 4 weeks, than a greedy algorthm)
 
-look_ahaed = 5
+look_ahead = 8
 winners = ['BUF','TB']
 
 # Define the optimization problem
@@ -266,7 +266,7 @@ survivor = LpProblem("survivor", LpMaximize)
 # Define the binary decision variables
 x = LpVariable.dicts(
     'x', 
-    [(week, team) for week, week_table in enumerate(week_tables[:look_ahaed]) for team in week_table["Team"]],
+    [(week, team) for week, week_table in enumerate(week_tables[:look_ahead]) for team in week_table["Team"]],
     cat="Binary"
 )
 
@@ -276,24 +276,24 @@ survivor += lpSum(
         week_table.loc[week_table["Team"] == team, "Probability"]
         .values[0]
     )
-    for week, week_table in enumerate(week_tables[:look_ahaed])
+    for week, week_table in enumerate(week_tables[:look_ahead])
     for team in week_table["Team"]
 )
 
 # Add a constraint to ensure 'BUF' and 'TB' cannot be selected
 for team in winners:
-    for week, week_table in enumerate(week_tables[:look_ahaed]):
+    for week, week_table in enumerate(week_tables[:look_ahead]):
         if team in week_table["Team"].values:
             survivor += x[(week, team)] == 0, f"Exclude_{team}_from_week_{week}"
 
 # Constraint 1: Only one team per week
-for week, week_table in enumerate(week_tables[:look_ahaed]):
+for week, week_table in enumerate(week_tables[:look_ahead]):
     survivor += lpSum(x[(week, team)] for team in week_table["Team"]) == 1, f"One_team_per_week_{week}"
 
 # Constraint 2: Each team can only be selected once
 all_teams = set(team for week_table in week_tables for team in week_table["Team"])
 for team in all_teams:
-    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables[:look_ahaed]) if team in week_table["Team"].values) <= 1, f"One_time_team_{team}"
+    survivor += lpSum(x[(week, team)] for week, week_table in enumerate(week_tables[:look_ahead]) if team in week_table["Team"].values) <= 1, f"One_time_team_{team}"
 
 # Solve the problem
 pulp.LpSolverDefault.msg = False
@@ -302,13 +302,13 @@ survivor.solve()
 print(f"Solver Status: {LpStatus[survivor.status]}")
 
 # Loop through each week and append the chosen team to the winners list
-for week, week_table in enumerate(week_tables[:look_ahaed]):
+for week, week_table in enumerate(week_tables[:look_ahead]):
     for team in week_table["Team"]:
         if x[(week, team)].varValue == 1:  # If the team is selected (binary decision variable is 1)
             winners.append(team)  # Add to winners list
             #print(f"Week {week + 1}: {team} is chosen")  # Print the team chosen for that week
 
-for week_table in week_tables[look_ahaed:]:
+for week_table in week_tables[look_ahead:]:
     for _, row in week_table.iterrows():
         team = row["Team"]
         if team not in winners:
