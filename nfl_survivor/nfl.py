@@ -199,7 +199,7 @@ for week_table in week_tables:
 winners_greedy = winners_remaining_weeks_greedy
 
 
-#Solution by ChatGPT (full lookahead)
+#Solution 2 (full lookahead)
 
 winners = ['BUF','TB']
 
@@ -259,7 +259,7 @@ for week, week_table in enumerate(week_tables):
 winners_full_lookahead = winners_remaining_weeks_full
 
 
-#Define problem with look_ahead = 4 (aim is to maximize the probability of surviving for 4 weeks, than a greedy algorthm)
+#Solution 3: Define problem with look_ahead = n (aim is to maximize the probability of surviving for n weeks, than a greedy algorthm)
 
 look_ahead = 8
 winners = ['BUF','TB']
