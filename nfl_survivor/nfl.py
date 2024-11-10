@@ -186,15 +186,17 @@ for week in range(3, 19):  # 19 is exclusive, so this will go from 3 to 18
 
 #solution 1 (greedy algorithm)
 
+winners_remaining_weeks_greedy=[]
 
 for week_table in week_tables:
     for _, row in week_table.iterrows():
         team = row["Team"]
         if team not in winners:
             winners.append(team)
+            winners_remaining_weeks_greedy.append(team)
             break
 
-winners_greedy = winners
+winners_greedy = winners_remaining_weeks_greedy
 
 
 #Solution by ChatGPT (full lookahead)
@@ -246,13 +248,15 @@ survivor.solve()
 print(f"Solver Status: {LpStatus[survivor.status]}")
 
 # Loop through each week and append the chosen team to the winners list
+winners_remaining_weeks_full=[]
 for week, week_table in enumerate(week_tables):
     for team in week_table["Team"]:
         if x[(week, team)].varValue == 1:  # If the team is selected (binary decision variable is 1)
             winners.append(team)  # Add to winners list
+            winners_remaining_weeks_full.append(team)
             #print(f"Week {week + 1}: {team} is chosen")  # Print the team chosen for that week
 
-winners_full_lookahead = winners
+winners_full_lookahead = winners_remaining_weeks_full
 
 
 #Define problem with look_ahead = 4 (aim is to maximize the probability of surviving for 4 weeks, than a greedy algorthm)
@@ -302,10 +306,13 @@ survivor.solve()
 print(f"Solver Status: {LpStatus[survivor.status]}")
 
 # Loop through each week and append the chosen team to the winners list
+winners_remaining_weeks=[]
+
 for week, week_table in enumerate(week_tables[:look_ahead]):
     for team in week_table["Team"]:
         if x[(week, team)].varValue == 1:  # If the team is selected (binary decision variable is 1)
             winners.append(team)  # Add to winners list
+            winners_remaining_weeks.append(team)
             #print(f"Week {week + 1}: {team} is chosen")  # Print the team chosen for that week
 
 for week_table in week_tables[look_ahead:]:
@@ -313,9 +320,10 @@ for week_table in week_tables[look_ahead:]:
         team = row["Team"]
         if team not in winners:
             winners.append(team)
+            winners_remaining_weeks.append(team)
             break
 
-winners_with_lookahead = winners
+winners_with_lookahead = winners_remaining_weeks
 
 
 # Print the final list of winners
